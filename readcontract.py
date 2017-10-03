@@ -67,6 +67,7 @@ def getlogs(filt, c, ico):
 def readtransfers(caddr, ico, block=0):
     c = makeconn()
     newfilter = c.eth_newFilter(from_block=hex(block), to_block="latest", address=caddr, topics=[transfer])
+    print 'For ico=%s, filter=%s' % (ico,newfilter)
     logs = getlogs(newfilter, c, ico)
     print "Looking in ico=%s for transfers" % ico
     with open('./transfers/%s.csv' % ico, 'w') as f:

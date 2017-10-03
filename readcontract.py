@@ -3,7 +3,8 @@ from collections import defaultdict
 import argparse, sys, json
 from threading import Thread
 from ethereum.utils import sha3
-
+from multiprocessing import Pool, Process, Lock
+from argparse import RawTextHelpFormatter
 transfer = 'Transfer(address,address,uint256)'
 approval = 'Approval(address,address,uint256)'
 transfer = '0x%s' % sha3(transfer).encode('hex')
@@ -22,6 +23,7 @@ def getblockbyhash(h, c):
     else:
         _mapping[h] = c.eth_getBlockByHash(h)
         return _mapping[h]
+
 
 def readcontracttxs(caddr, firstblock, ico):
     print "Looking for ico=%s with addr=%s"
@@ -53,11 +55,20 @@ def readcontracttxs(caddr, firstblock, ico):
         except KeyboardInterrupt:
             pass         
 
+lock = Lock()
+def getlogs(filt, c, ico):
+    lock.acquire()
+    print "Got lock for ico=%s" % ico
+    logs = c.eth_getFilterLogs(filt)
+    print 'Logs for ico=%s' % ico
+    lock.release()
+    return logs 
+        
 def readtransfers(caddr, ico, block=0):
-    print "Looking in ico=%s for transfers" % ico
     c = makeconn()
     newfilter = c.eth_newFilter(from_block=hex(block), to_block="latest", address=caddr, topics=[transfer])
-    logs = c.eth_getFilterLogs(newfilter)
+    logs = getlogs(newfilter, c, ico)
+    print "Looking in ico=%s for transfers" % ico
     with open('./transfers/%s.csv' % ico, 'w') as f:
         for log in logs:
             block = getblockbyhash(log['blockHash'], c)
@@ -106,9 +117,20 @@ def transfers():
         readtransfers(args.addr, args.ico) 
 
 
-if __name__ == '__main__':
+
+def transfersall():
     parser = argparse.ArgumentParser()
-    parser.add_argument('command', type=str, help="\ncontract: get transactions for one contract\ncontracts: input a json with 'ico' : ('address', int(first_block)) for all icos\ntransfers: get all token transfer for a given contract")
+    parser.add_argument('icos', type=str, help="json of icos with 'name' : (int(addr), int(first_block))")
+    args = parser.parse_args(sys.argv[2:])
+    d = json.load(open(args.icos))
+    for ico,(addr,block) in d.iteritems():
+        Process(target=readtransfers, args=(addr, ico, block)).start()
+             
+    
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter)
+    parser.add_argument('command', type=str, help="\ncontract: get transactions for one contract\n\ncontracts: input a json with 'ico' : ('address', int(first_block)) for all icos\n\ntransfers: get all token transfer for a given contract\n\ntransfersall: read a json file with all icos desired with the form 'name' : (str(addr), int(first_block)")
     args = parser.parse_args(sys.argv[1:2])
     locals()[args.command]()
 

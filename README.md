@@ -3,6 +3,8 @@ Scripts to talk to a geth node to scrape contract logs for token transfers.
 The `icos.json` is a ditionary that mapes a token to its contract address and the block that its creator transaction appeared in (from [etherscan.io](etherscan.io)).
 Only need to change the address of the geth client in the `makeconn` function.
 
+**Dependencies**: [ethjsonrpc](https://github.com/ConsenSys/ethjsonrpc), [pyethereum](https://github.com/ethereum/pyethereum)
+
 ## `readcontract.py`
 Has a good command line interface.
 

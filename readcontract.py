@@ -25,13 +25,13 @@ def getblockbyhash(h, c):
         return _mapping[h]
 
 
-def readcontracttxs(caddr, firstblock, ico):
-    print "Looking for ico=%s with addr=%s"
+def readcontracttxs(caddr, firstblock, token):
+    print "Looking for token=%s with addr=%s"
     c = makeconn()
     relevant_txs = []
     amt_recv = 0
     amt_sent = 0
-    with open('./contracts/%s.csv' % (ico), 'w') as f:
+    with open('./contracts/%s.csv' % (token), 'w') as f:
         try:
             currblock = firstblock
             while currblock != c.eth_blockNumber():
@@ -56,21 +56,21 @@ def readcontracttxs(caddr, firstblock, ico):
             pass         
 
 lock = Lock()
-def getlogs(filt, c, ico):
+def getlogs(filt, c, token):
     lock.acquire()
-    print "Got lock for ico=%s" % ico
+    print "Got lock for token=%s" % token
     logs = c.eth_getFilterLogs(filt)
-    print 'Logs for ico=%s' % ico
+    print 'Logs for token=%s' % token
     lock.release()
     return logs 
         
-def readtransfers(caddr, ico, block=0):
+def readtransfers(caddr, token, block=0):
     c = makeconn()
     newfilter = c.eth_newFilter(from_block=hex(block), to_block="latest", address=caddr, topics=[transfer])
-    print 'For ico=%s, filter=%s' % (ico,newfilter)
-    logs = getlogs(newfilter, c, ico)
-    print "Looking in ico=%s for transfers" % ico
-    with open('./transfers/%s.csv' % ico, 'w') as f:
+    print 'For token=%s, filter=%s' % (token,newfilter)
+    logs = getlogs(newfilter, c, token)
+    print "Looking in token=%s for transfers" % token
+    with open('./transfers/%s.csv' % token, 'w') as f:
         for log in logs:
             block = getblockbyhash(log['blockHash'], c)
             blockno = block['number']
@@ -83,23 +83,23 @@ def readtransfers(caddr, ico, block=0):
 def contracttxs():
     parser = argparse.ArgumentParser()
     parser.add_argument('addr', type=str, help="address of erc20 to scrape")
-    parser.add_argument('ico', type=str, help="name of token for output file")
+    parser.add_argument('token', type=str, help="name of token for output file")
     parser.add_argument('-b', type=int, help="block number of creator transaction")
     args = parser.parse_args(sys.argv[2:])
     print args.b
     if args.b:
-        readcontract(args.addr, args.b, args.ico)
+        readcontract(args.addr, args.b, args.token)
     else:
-        readcontract(args.addr, 0, args.ico)
+        readcontract(args.addr, 0, args.token)
 
 def contractstxs():
     parser = argparse.ArgumentParser()
-    parser.add_argument("icos", type=str, help="json file containing 'ico': ('address', int(first_block)) mappings")
+    parser.add_argument("tokens", type=str, help="json file containing 'token': ('address', int(first_block)) mappings")
     args = parser.parse_args(sys.argv[2:])
-    addrmap = json.load(open(args.icos))
+    addrmap = json.load(open(args.tokens))
     threads = []
-    for ico,(addr, block) in addrmap.iteritems():
-        t = Thread(target=readcontract, args=(addr, block, ico))
+    for token,(addr, block) in addrmap.iteritems():
+        t = Thread(target=readcontract, args=(addr, block, token))
         t.start()
         threads.append(t)
 
@@ -109,29 +109,29 @@ def contractstxs():
 def transfers():
     parser = argparse.ArgumentParser()
     parser.add_argument('addr', type=str, help="address of erc20 to scrape")
-    parser.add_argument('ico', type=str, help="name of token for output file")
+    parser.add_argument('token', type=str, help="name of token for output file")
     parser.add_argument('-f', type=int, default=1, help="block to start from (default: 1)")
     args = parser.parse_args(sys.argv[2:])
     if args.f:
-        readtransfers(args.addr, args.ico, args.f)
+        readtransfers(args.addr, args.token, args.f)
     else:
-        readtransfers(args.addr, args.ico) 
+        readtransfers(args.addr, args.token) 
 
 
 
 def transfersall():
     parser = argparse.ArgumentParser()
-    parser.add_argument('icos', type=str, help="json of icos with 'name' : (int(addr), int(first_block))")
+    parser.add_argument('tokens', type=str, help="json of tokens with 'name' : (int(addr), int(first_block))")
     args = parser.parse_args(sys.argv[2:])
-    d = json.load(open(args.icos))
-    for ico,(addr,block) in d.iteritems():
-        Process(target=readtransfers, args=(addr, ico, block)).start()
+    d = json.load(open(args.tokens))
+    for token,(addr,block) in d.iteritems():
+        Process(target=readtransfers, args=(addr, token, block)).start()
              
     
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter)
-    parser.add_argument('command', type=str, help="\ncontract: get transactions for one contract\n\ncontracts: input a json with 'ico' : ('address', int(first_block)) for all icos\n\ntransfers: get all token transfer for a given contract\n\ntransfersall: read a json file with all icos desired with the form 'name' : (str(addr), int(first_block)")
+    parser.add_argument('command', type=str, help="\ncontract: get transactions for one contract\n\ncontracts: input a json with 'token' : ('address', int(first_block)) for all tokens\n\ntransfers: get all token transfer for a given contract\n\ntransfersall: read a json file with all tokens desired with the form 'name' : (str(addr), int(first_block)")
     args = parser.parse_args(sys.argv[1:2])
     locals()[args.command]()
 

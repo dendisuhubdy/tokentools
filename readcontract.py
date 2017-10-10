@@ -5,8 +5,12 @@ from threading import Thread
 from ethereum.utils import sha3
 from multiprocessing import Pool, Process, Lock
 from argparse import RawTextHelpFormatter
+import time
+
 transfer = 'Transfer(address,address,uint256)'
 approval = 'Approval(address,address,uint256)'
+decimals = 'decimals()'
+decimals = '0x%s' % sha3(decimals).encode('hex')[:32]
 transfer = '0x%s' % sha3(transfer).encode('hex')
 approval = '0x%s' % sha3(approval).encode('hex')
 
@@ -16,14 +20,15 @@ def ih(i):
 def makeconn():
     return EthJsonRpc('172.17.0.26', 8545)
 
-_mapping = {}
-def getblockbyhash(h, c):
-    if h in _mapping:
-        return _mapping[h]
-    else:
-        _mapping[h] = c.eth_getBlockByHash(h)
-        return _mapping[h]
-
+def blocknumberoracle():
+    _mapping = {}    
+    def r(h,c):
+        if h in _mapping:
+            return _mapping[h]
+        else:
+            _mapping[h] = c.eth_getBlockByHash(h)['number']
+            return _mapping[h]
+    return r
 
 def readcontracttxs(caddr, firstblock, token):
     print "Looking for token=%s with addr=%s"
@@ -63,22 +68,55 @@ def getlogs(filt, c, token):
     print 'Logs for token=%s' % token
     lock.release()
     return logs 
-        
+  
+def getdecimals(addr, c):
+    num = c.eth_call(to_address=addr, data=decimals)
+    if num == '0x':
+        return 18
+    else:
+        return ih(num)
+
+_blocknumbers = {}
+_blocktimestamps = {}
+def getblocknumberbyhash(h, c):
+    if h in _blocknumbers:
+        return _blocknumbers[h]
+    else:
+        block = c.eth_getBlockByHash(h)
+        _blocknumbers[h] = block['number']
+        _blocktimestamps[h] = block['timestamp']
+        return _blocknumbers[h]
+    
+def getblocktimestampbyhash(h,c):
+    if h in _blocktimestamps:
+        return _blocktimestamps[h]
+    else:
+        block = c.eth_getBlockByHash(h)
+        _blocknumbers[h] = block['number']
+        _blocktimestamps[h] = block['timestamp']
+        return _blocktimestamps[h]
+ 
 def readtransfers(caddr, token, block=0):
     c = makeconn()
     newfilter = c.eth_newFilter(from_block=hex(block), to_block="latest", address=caddr, topics=[transfer])
     print 'For token=%s, filter=%s' % (token,newfilter)
     logs = getlogs(newfilter, c, token)
     print "Looking in token=%s for transfers" % token
-    with open('./transfers/%s.csv' % token, 'w') as f:
-        for log in logs:
-            block = getblockbyhash(log['blockHash'], c)
-            blockno = block['number']
-            timestamp = block['timestamp']
-            fro = '0x%s' % log['topics'][1][64-40+2:]
-            to = '0x%s' % log['topics'][2][64-40+2:]
-            amt = int(int(log['data'], 16) / 10**18)
-            f.write('%s,%s,%s,%s,%d\n' % (ih(blockno), ih(timestamp), to, fro, amt))
+    numdec = getdecimals(caddr, c)
+    output = ''
+    print len(logs)
+    for log in logs:
+        blockno = log['blockNumber']
+        timestamp = getblocktimestampbyhash(log['blockHash'], c)
+        fro = '0x%s' % log['topics'][1][64-40+2:]
+        to = '0x%s' % log['topics'][2][64-40+2:]
+        amt = int(int(log['data'], 16) / 10.0**numdec)
+        output += '%s,%s,%s,%s,%d\n' % (ih(blockno), ih(timestamp), to, fro, amt)
+        
+    f = open('./transfers/%s.csv' % token, 'w')
+    f.write(output)
+    f.close()
+          
 
 def contracttxs():
     parser = argparse.ArgumentParser()

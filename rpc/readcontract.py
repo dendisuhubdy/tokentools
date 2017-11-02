@@ -18,7 +18,7 @@ def ih(i):
     return int(i, 16)
 
 def makeconn():
-    return EthJsonRpc('172.17.0.26', 8545)
+    return EthJsonRpc('172.19.0.17', 8545)
 
 def blocknumberoracle():
     _mapping = {}    
@@ -76,8 +76,14 @@ def getdecimals(addr, c):
     else:
         return ih(num)
 
+try:
+    _blocktimestamps = pickle.load(open('blocktimestamp.dump'))
+    print 'Opened blocktimestamps from pickle.'
+except:
+    print 'No pickle for blocktimestamps, initialize empty.'
+    _blocktimestamps = {}
+
 _blocknumbers = {}
-_blocktimestamps = {}
 def getblocknumberbyhash(h, c):
     if h in _blocknumbers:
         return _blocknumbers[h]
@@ -97,25 +103,30 @@ def getblocktimestampbyhash(h,c):
         return _blocktimestamps[h]
  
 def readtransfers(caddr, token, block=0):
-    c = makeconn()
-    newfilter = c.eth_newFilter(from_block=hex(block), to_block="latest", address=caddr, topics=[transfer])
-    print 'For token=%s, filter=%s' % (token,newfilter)
-    logs = getlogs(newfilter, c, token)
-    print "Looking in token=%s for transfers" % token
-    numdec = getdecimals(caddr, c)
-    output = ''
-    print len(logs)
-    for log in logs:
-        blockno = log['blockNumber']
-        timestamp = getblocktimestampbyhash(log['blockHash'], c)
-        fro = '0x%s' % log['topics'][1][64-40+2:]
-        to = '0x%s' % log['topics'][2][64-40+2:]
-        amt = int(int(log['data'], 16) / 10.0**numdec)
-        output += '%s,%s,%s,%s,%d\n' % (ih(blockno), ih(timestamp), to, fro, amt)
-        
-    f = open('./transfers/%s.csv' % token, 'w')
-    f.write(output)
-    f.close()
+    try:
+        c = makeconn()
+        newfilter = c.eth_newFilter(from_block=hex(block), to_block="latest", address=caddr, topics=[transfer])
+        print 'For token=%s, filter=%s' % (token,newfilter)
+        logs = getlogs(newfilter, c, token)
+        print "Looking in token=%s for transfers" % token
+        numdec = getdecimals(caddr, c)
+        output = ''
+        print len(logs)
+        for log in logs:
+            blockno = log['blockNumber']
+            timestamp = getblocktimestampbyhash(log['blockHash'], c)
+            fro = '0x%s' % log['topics'][1][64-40+2:]
+            to = '0x%s' % log['topics'][2][64-40+2:]
+            amt = int(int(log['data'], 16) / 10.0**numdec)
+            output += '%s,%s,%s,%s,%d\n' % (ih(blockno), ih(timestamp), to, fro, amt)
+            
+        f = open('./transfers/%s.csv' % token, 'w')
+        f.write(output)
+        f.close()
+    except: pass
+
+    import pickle
+    pickle.dump(_blocktimestamps, open('blocktimestamps.dump', 'w'))
           
 
 def contracttxs():
@@ -163,7 +174,7 @@ def transfersall():
     args = parser.parse_args(sys.argv[2:])
     d = json.load(open(args.tokens))
     for token,(addr,block) in d.iteritems():
-        Process(target=readtransfers, args=(addr, token, block)).start()
+        readtransfers(addr, token, block)
              
     
 
